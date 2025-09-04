@@ -346,16 +346,86 @@ function Dashboard({ token, userIdentifier, onLogout }) {
     const [filters, setFilters] = useState({ status: '', priority: '', tag: '', category: '' });
     const [walletAddress, setWalletAddress] = useState(localStorage.getItem('walletAddress'));
   
-    const fetchTasks = useCallback(async () => { /* ... unchanged ... */ }, [token, filters]);
-    const createTask = async (e) => { /* ... unchanged ... */ };
-    const shareTask = async (taskId, toAddress) => { /* ... unchanged ... */ };
-    const connectWallet = async () => { /* ... unchanged ... */ };
-    const disconnectWallet = async () => { /* ... unchanged ... */ };
+    const fetchTasks = useCallback(async () => {
+    try {
+      const res = await axios.get(`${SERVER}/api/tasks`, {
+        headers: { 'x-auth-token': token },
+        params: filters
+      });
+      setTasks(res.data);
+    } catch (err) {
+      setNotif({ type: 'error', message: 'Fetch failed' });
+    }
+  }, [token, filters]);
+
+  const createTask = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${SERVER}/api/tasks`, {
+        ...form,
+        tags: form.tags.split(',').map(t => t.trim())
+      }, { headers: { 'x-auth-token': token } });
+      setForm({ content: '', dueDate: '', category: '', priority: 'Medium', status: 'Pending', tags: '' });
+      fetchTasks();
+      setNotif({ type: 'success', message: 'Task created' });
+    } catch {
+      setNotif({ type: 'error', message: 'Task creation failed' });
+    }
+  };
+
+  const shareTask = async (taskId, toAddress) => {
+    try {
+      const contract = await getContract();
+      const tx = await contract.transferTask(taskId, toAddress);
+      await tx.wait();
+      setNotif({ type: 'success', message: 'Task transferred on blockchain!' });
+    } catch (err) {
+      setNotif({ type: 'error', message: 'Failed to transfer task' });
+    }
+  };
+
+  const connectWallet = async () => {
+    if (!window.ethereum) {
+        return setNotif({ type: 'error', message: "MetaMask not found" });
+    }
+    try {
+        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        const address = accounts[0];
+
+        // Server-side validation
+        const res = await axios.post(`${SERVER}/api/wallet/connect`, 
+            { walletAddress: address },
+            { headers: { 'x-auth-token': token } }
+        );
+
+        setWalletAddress(res.data.walletAddress);
+        localStorage.setItem('walletAddress', res.data.walletAddress);
+        setNotif({ type: 'success', message: `Wallet connected: ${address.slice(0,6)}...${address.slice(-4)}` });
+
+    } catch (err) {
+        setNotif({ type: 'error', message: err.response?.data?.msg || "Wallet connection failed" });
+    }
+  };
+
+  const disconnectWallet = async () => {
+    try {
+        await axios.post(`${SERVER}/api/wallet/disconnect`, {}, { headers: { 'x-auth-token': token } });
+        setWalletAddress(null);
+        localStorage.removeItem('walletAddress');
+        setNotif({ type: 'success', message: 'Wallet disconnected' });
+    } catch (err) {
+        setNotif({ type: 'error', message: 'Failed to disconnect wallet' });
+    }
+  };
+
+  useEffect(() => { fetchTasks(); }, [fetchTasks]);
   
-    useEffect(() => { fetchTasks(); }, [fetchTasks]);
-  
-    const stats = { /* ... unchanged ... */ };
-  
+    const stats = {
+      total: tasks.length,
+      completed: tasks.filter(t => t.status === 'Completed').length,
+      pending: tasks.filter(t => t.status === 'Pending').length,
+      high: tasks.filter(t => t.priority === 'High').length
+    };
     return (
       <div className="dashboard">
         <Notification notif={notif} onClose={() => setNotif(null)} />
@@ -374,7 +444,61 @@ function Dashboard({ token, userIdentifier, onLogout }) {
             <button onClick={onLogout} className="btn danger">Logout</button>
           </div>
         </header>
-        {/* ... The rest of your dashboard JSX is unchanged ... */}
+              <div className="stats">
+        <div className="stat-card">📌 Total: {stats.total}</div>
+        <div className="stat-card">✅ Completed: {stats.completed}</div>
+        <div className="stat-card">🕒 Pending: {stats.pending}</div>
+        <div className="stat-card">🔥 High Priority: {stats.high}</div>
+      </div>
+
+      <form onSubmit={createTask} className="task-form">
+        <input placeholder="Task content" value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} required />
+        <input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
+        <input placeholder="Category (e.g. Work, Personal)" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+        <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
+          <option>Low</option><option>Medium</option><option>High</option>
+        </select>
+        <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+          <option>Pending</option><option>Completed</option><option>On Hold</option><option>Postponed</option>
+        </select>
+        <input placeholder="Tags (comma separated)" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
+        <button type="submit" className="btn primary">Add Task</button>
+      </form>
+
+      <div className="filters">
+        <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
+          <option value="">All Status</option>
+          <option>Pending</option><option>Completed</option><option>On Hold</option><option>Postponed</option>
+        </select>
+        <select value={filters.priority} onChange={(e) => setFilters({ ...filters, priority: e.target.value })}>
+          <option value="">All Priority</option>
+          <option>Low</option><option>Medium</option><option>High</option>
+        </select>
+        <input placeholder="Search by Tag" value={filters.tag} onChange={(e) => setFilters({ ...filters, tag: e.target.value })} />
+        <input placeholder="Filter by Category" value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} />
+      </div>
+
+      <div className="task-list">
+        {tasks.length === 0 ? (
+          <p className="empty-text">No tasks yet. Add one!</p>
+        ) : (
+          <ul>
+            {tasks.map((t) => (
+              <li key={t._id} className="task-item">
+                <span>{t.content}</span>
+                {t.dueDate && <small> ⏰ {new Date(t.dueDate).toLocaleDateString()}</small>}
+                {t.category && <small> 📂 {t.category}</small>}
+                <small> [{t.priority}] [{t.status}]</small>
+                {t.tags.length > 0 && <small> 🏷 {t.tags.join(", ")}</small>}
+                <button className="btn share" onClick={() => {
+                  const addr = prompt("Enter recipient wallet address:");
+                  if (addr) shareTask(t._id, addr);
+                }}>🔗 Share</button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       </div>
     );
 }
