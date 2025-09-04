@@ -8,8 +8,8 @@ import './App.css';
 // <<<<<<< IMPORTANT: Make sure this URL matches your Render backend URL
 
 const API_BASE_URL = process.env.NODE_ENV === 'production'
-  ? 'https://chaintask-backend.onrender.com/api'
-  : 'http://localhost:5001/api';
+  ? 'https://chaintask-backend.onrender.com'
+  : 'http://localhost:5001';
 
 const contractABI = [
     {
