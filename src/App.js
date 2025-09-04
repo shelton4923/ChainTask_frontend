@@ -6,7 +6,10 @@ import { ethers } from 'ethers';
 import './App.css';
 
 // <<<<<<< IMPORTANT: Make sure this URL matches your Render backend URL
-const SERVER = process.env.REACT_APP_SERVER_URL || 'https://chaintask-backend.onrender.com'; 
+
+const API_BASE_URL = process.env.NODE_ENV === 'production'
+  ? 'https://chaintask-backend.onrender.com/api'
+  : 'http://localhost:5001/api';
 
 const contractABI = [
     {
