@@ -1,15 +1,9 @@
-// App.js
-
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { ethers } from 'ethers';
 import './App.css';
 
-// <<<<<<< IMPORTANT: Make sure this URL matches your Render backend URL
-
-const API_BASE_URL = process.env.NODE_ENV === 'production'
-  ? 'https://chaintask-backend.onrender.com'
-  : 'http://localhost:5001';
+const SERVER = process.env.REACT_APP_SERVER_URL || 'http://localhost:5001';
 
 const contractABI = [
     {
@@ -283,13 +277,9 @@ function Notification({ notif, onClose }) {
   );
 }
 
-// =================================================================
-// --- UPDATED AUTH COMPONENT ---
-// =================================================================
 function Auth({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
-  // <<<<<<< CHANGED: Simplified form state for email/password
-  const [form, setForm] = useState({ email: '', password: '' });
+  const [form, setForm] = useState({ username: '', email: '', password: '', confirmPassword: '' });
   const [notif, setNotif] = useState(null);
 
   const change = (e) => setForm({ ...form, [e.target.name]: e.target.value });
@@ -297,10 +287,9 @@ function Auth({ onLogin }) {
   const doRegister = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post(`${SERVER}/api/auth/register`, { email: form.email, password: form.password });
+      const res = await axios.post(`${SERVER}/api/auth/register`, form);
       setNotif({ type: 'success', message: res.data.msg });
-      setIsLogin(true); // Switch to login form on successful registration
-      setForm({ email: '', password: '' }); // Clear form
+      setIsLogin(true);
     } catch (err) {
       setNotif({ type: 'error', message: err.response?.data?.msg || 'Register failed' });
     }
@@ -309,15 +298,14 @@ function Auth({ onLogin }) {
   const doLogin = async (e) => {
     e.preventDefault();
     try {
-      // <<<<<<< CHANGED: Sending email and password
-      const res = await axios.post(`${SERVER}/api/auth/login`, { email: form.email, password: form.password });
-      const { token, userIdentifier, walletAddress } = res.data;
+      const res = await axios.post(`${SERVER}/api/auth/login`, form);
+      const { token, username, walletAddress } = res.data;
       localStorage.setItem('token', token);
-      localStorage.setItem('userIdentifier', userIdentifier); // Storing email as the identifier
+      localStorage.setItem('username', username);
       if (walletAddress) {
         localStorage.setItem('walletAddress', walletAddress);
       }
-      onLogin(token, userIdentifier, walletAddress);
+      onLogin(token, username, walletAddress);
     } catch (err) {
       setNotif({ type: 'error', message: err.response?.data?.msg || 'Login failed' });
     }
@@ -328,9 +316,10 @@ function Auth({ onLogin }) {
       <Notification notif={notif} onClose={() => setNotif(null)} />
       <h1 className="app-title">ChainTask</h1>
       <form onSubmit={isLogin ? doLogin : doRegister} className="auth-form">
-        {/* <<<<<<< CHANGED: Using email for both login and register */}
-        <input name="email" type="email" placeholder="Email" value={form.email} onChange={change} required />
+        <input name="username" placeholder="Username" value={form.username} onChange={change} required />
+        {!isLogin && <input name="email" type="email" placeholder="Email" value={form.email} onChange={change} required />}
         <input name="password" type="password" placeholder="Password" value={form.password} onChange={change} required />
+        {!isLogin && <input name="confirmPassword" type="password" placeholder="Confirm Password" value={form.confirmPassword} onChange={change} required />}
         <button type="submit" className="btn primary">{isLogin ? "Login" : "Register"}</button>
       </form>
       <button onClick={() => setIsLogin(!isLogin)} className="btn switch">
@@ -340,16 +329,14 @@ function Auth({ onLogin }) {
   );
 }
 
-function Dashboard({ token, userIdentifier, onLogout }) {
-    // ... your entire Dashboard component code remains the same ...
-    // Just make sure to display `userIdentifier` where you previously displayed `username`
-    const [tasks, setTasks] = useState([]);
-    const [form, setForm] = useState({ content: '', dueDate: '', category: '', priority: 'Medium', status: 'Pending', tags: '' });
-    const [notif, setNotif] = useState(null);
-    const [filters, setFilters] = useState({ status: '', priority: '', tag: '', category: '' });
-    const [walletAddress, setWalletAddress] = useState(localStorage.getItem('walletAddress'));
-  
-    const fetchTasks = useCallback(async () => {
+function Dashboard({ token, username, onLogout }) {
+  const [tasks, setTasks] = useState([]);
+  const [form, setForm] = useState({ content: '', dueDate: '', category: '', priority: 'Medium', status: 'Pending', tags: '' });
+  const [notif, setNotif] = useState(null);
+  const [filters, setFilters] = useState({ status: '', priority: '', tag: '', category: '' });
+  const [walletAddress, setWalletAddress] = useState(localStorage.getItem('walletAddress'));
+
+  const fetchTasks = useCallback(async () => {
     try {
       const res = await axios.get(`${SERVER}/api/tasks`, {
         headers: { 'x-auth-token': token },
@@ -422,32 +409,33 @@ function Dashboard({ token, userIdentifier, onLogout }) {
   };
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
-  
-    const stats = {
-      total: tasks.length,
-      completed: tasks.filter(t => t.status === 'Completed').length,
-      pending: tasks.filter(t => t.status === 'Pending').length,
-      high: tasks.filter(t => t.priority === 'High').length
-    };
-    return (
-      <div className="dashboard">
-        <Notification notif={notif} onClose={() => setNotif(null)} />
-        <header className="dashboard-header">
-           {/* <<<<<<< CHANGED: Displaying the user's email */}
-          <h1 className="app-title">Welcome, {userIdentifier}</h1>
-          <div className="header-actions">
-            {walletAddress ? (
-              <>
-                <span className="wallet-text">Wallet: {walletAddress.slice(0,6)}...{walletAddress.slice(-4)}</span>
-                <button className="btn disconnect" onClick={disconnectWallet}>Disconnect</button>
-              </>
-            ) : (
-              <button className="btn connect" onClick={connectWallet}>Connect Wallet</button>
-            )}
-            <button onClick={onLogout} className="btn danger">Logout</button>
-          </div>
-        </header>
-              <div className="stats">
+
+  const stats = {
+    total: tasks.length,
+    completed: tasks.filter(t => t.status === 'Completed').length,
+    pending: tasks.filter(t => t.status === 'Pending').length,
+    high: tasks.filter(t => t.priority === 'High').length
+  };
+
+  return (
+    <div className="dashboard">
+      <Notification notif={notif} onClose={() => setNotif(null)} />
+      <header className="dashboard-header">
+        <h1 className="app-title">ChainTask</h1>
+        <div className="header-actions">
+          {walletAddress ? (
+            <>
+              <span className="wallet-text">Wallet: {walletAddress.slice(0,6)}...{walletAddress.slice(-4)}</span>
+              <button className="btn disconnect" onClick={disconnectWallet}>Disconnect</button>
+            </>
+          ) : (
+            <button className="btn connect" onClick={connectWallet}>Connect Wallet</button>
+          )}
+          <button onClick={onLogout} className="btn danger">Logout</button>
+        </div>
+      </header>
+
+      <div className="stats">
         <div className="stat-card">📌 Total: {stats.total}</div>
         <div className="stat-card">✅ Completed: {stats.completed}</div>
         <div className="stat-card">🕒 Pending: {stats.pending}</div>
@@ -502,18 +490,17 @@ function Dashboard({ token, userIdentifier, onLogout }) {
           </ul>
         )}
       </div>
-      </div>
-    );
+    </div>
+  );
 }
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('token'));
-  // <<<<<<< CHANGED: Renamed state for clarity. It now holds the email.
-  const [userIdentifier, setUserIdentifier] = useState(localStorage.getItem('userIdentifier'));
+  const [username, setUsername] = useState(localStorage.getItem('username'));
 
   const handleLogin = (tok, user, wallet) => {
     setToken(tok);
-    setUserIdentifier(user);
+    setUsername(user);
     if (wallet) {
       localStorage.setItem('walletAddress', wallet);
     }
@@ -521,12 +508,12 @@ export default function App() {
 
   const handleLogout = () => {
     setToken(null);
-    setUserIdentifier(null);
+    setUsername('');
     localStorage.clear();
   };
 
   return token ? (
-    <Dashboard token={token} userIdentifier={userIdentifier} onLogout={handleLogout} />
+    <Dashboard token={token} username={username} onLogout={handleLogout} />
   ) : (
     <Auth onLogin={handleLogin} />
   );
