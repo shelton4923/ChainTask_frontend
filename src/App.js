@@ -10,9 +10,8 @@ import './App.css';
 import contractABI from './ChainTaskABI.json';
 
 // --- 1. CONFIGURATION ---
-const SOCKET_IO_URL = 'http://localhost:5000';
-const API_URL = 'http://localhost:5000/api';
-
+const SOCKET_IO_URL = "https://chaintask-backend.onrender.com";
+const API_URL = "https://chaintask-backend.onrender.com/api";
 // CRITICAL: Replace this with the address of your deployed smart contract.
 const CONTRACT_ADDRESS = "0xBA827f2618e251920d46E616C45A6Ae59546010C";
 
