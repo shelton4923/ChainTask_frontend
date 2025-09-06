@@ -1,520 +1,368 @@
+// =======================================================================
+// ||           CHAIN-TASK FINAL FRONTEND APP (Refresh Fix)             ||
+// =======================================================================
+
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
 import { ethers } from 'ethers';
+import axios from 'axios';
+import io from 'socket.io-client';
 import './App.css';
+import contractABI from './ChainTaskABI.json';
 
-const SERVER = process.env.REACT_APP_SERVER_URL || 'http://localhost:5001';
+// --- 1. CONFIGURATION ---
+const SOCKET_IO_URL = 'http://localhost:5000';
+const API_URL = 'http://localhost:5000/api';
 
-const contractABI = [
-    {
-      "inputs": [],
-      "stateMutability": "nonpayable",
-      "type": "constructor"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "id",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "content",
-          "type": "string"
-        },
-        {
-          "indexed": false,
-          "internalType": "enum TodoList.Status",
-          "name": "status",
-          "type": "uint8"
-        },
-        {
-          "indexed": false,
-          "internalType": "address",
-          "name": "owner",
-          "type": "address"
-        }
-      ],
-      "name": "TaskCreated",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "id",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "address",
-          "name": "owner",
-          "type": "address"
-        }
-      ],
-      "name": "TaskDeleted",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "id",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "content",
-          "type": "string"
-        },
-        {
-          "indexed": false,
-          "internalType": "address",
-          "name": "owner",
-          "type": "address"
-        }
-      ],
-      "name": "TaskEdited",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "id",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "enum TodoList.Status",
-          "name": "status",
-          "type": "uint8"
-        }
-      ],
-      "name": "TaskStatusChanged",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "id",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "from",
-          "type": "address"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "to",
-          "type": "address"
-        }
-      ],
-      "name": "TaskTransferred",
-      "type": "event"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "_id",
-          "type": "uint256"
-        },
-        {
-          "internalType": "enum TodoList.Status",
-          "name": "_status",
-          "type": "uint8"
-        }
-      ],
-      "name": "changeStatus",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "string",
-          "name": "_content",
-          "type": "string"
-        }
-      ],
-      "name": "createTask",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "_id",
-          "type": "uint256"
-        }
-      ],
-      "name": "deleteTask",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "_id",
-          "type": "uint256"
-        },
-        {
-          "internalType": "string",
-          "name": "_content",
-          "type": "string"
-        }
-      ],
-      "name": "editTask",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "taskCount",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "name": "tasks",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "id",
-          "type": "uint256"
-        },
-        {
-          "internalType": "string",
-          "name": "content",
-          "type": "string"
-        },
-        {
-          "internalType": "enum TodoList.Status",
-          "name": "status",
-          "type": "uint8"
-        },
-        {
-          "internalType": "address",
-          "name": "owner",
-          "type": "address"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "_id",
-          "type": "uint256"
-        },
-        {
-          "internalType": "address",
-          "name": "_newOwner",
-          "type": "address"
-        }
-      ],
-      "name": "transferTask",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    }
-  ];
-const contractAddress = "0x52596AB3C9d3eA596b46f18571Fe1d85388448a9"; // your deployed contract
+// CRITICAL: Replace this with the address of your deployed smart contract.
+const CONTRACT_ADDRESS = "0xBA827f2618e251920d46E616C45A6Ae59546010C";
 
-async function getContract() {
-  if (!window.ethereum) throw new Error("MetaMask not found");
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  const signer = await provider.getSigner();
-  return new ethers.Contract(contractAddress, contractABI, signer);
-}
+const socket = io(SOCKET_IO_URL);
 
-function Notification({ notif, onClose }) {
-  if (!notif) return null;
-  return (
-    <div className={`notification ${notif.type || 'success'}`}>
-      {notif.message}
-      <button className="dismiss-btn" onClick={onClose}>×</button>
+// --- 2. SUB-COMPONENTS ---
+const LoadingSpinner = () => (
+    <div className="spinner-overlay">
+        <div className="spinner"></div>
     </div>
-  );
-}
+);
 
-function Auth({ onLogin }) {
-  const [isLogin, setIsLogin] = useState(true);
-  const [form, setForm] = useState({ username: '', email: '', password: '', confirmPassword: '' });
-  const [notif, setNotif] = useState(null);
+// --- 3. MAIN APP COMPONENT ---
+function App() {
+    // --- STATE MANAGEMENT ---
+    const [isLoading, setIsLoading] = useState(true);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isLoginView, setIsLoginView] = useState(true);
+    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    
+    const [walletAddress, setWalletAddress] = useState('');
+    const [tasks, setTasks] = useState([]);
+    const [contract, setContract] = useState(null);
 
-  const change = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+    const [taskTitle, setTaskTitle] = useState('');
+    const [taskDesc, setTaskDesc] = useState('');
+    const [taskPriority, setTaskPriority] = useState('1');
+    const [taskDueDate, setTaskDueDate] = useState('');
 
-  const doRegister = async (e) => {
-    e.preventDefault();
-    try {
-      const res = await axios.post(`${SERVER}/api/auth/register`, form);
-      setNotif({ type: 'success', message: res.data.msg });
-      setIsLogin(true);
-    } catch (err) {
-      setNotif({ type: 'error', message: err.response?.data?.msg || 'Register failed' });
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterPriority, setFilterPriority] = useState('all');
+    const [theme, setTheme] = useState('light');
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const [isMining, setIsMining] = useState(false);
+
+    // --- HELPER FUNCTIONS ---
+    const getPriorityText = (priority) => {
+        switch(priority.toString()) {
+            case '2': return 'High';
+            case '1': return 'Medium';
+            case '0': return 'Low';
+            default: return 'Medium';
+        }
+    };
+
+    // --- BLOCKCHAIN & API INTERACTIONS ---
+    const fetchTasks = useCallback(async (contractInstance) => {
+        if (!contractInstance) return;
+        try {
+            const userTasks = await contractInstance.getTasks();
+            const formattedTasks = userTasks.map(task => ({
+                id: Number(task.id),
+                title: task.title,
+                description: task.description,
+                priority: Number(task.priority),
+                dueDate: Number(task.dueDate) * 1000,
+                isDone: task.isDone
+            }));
+            setTasks(formattedTasks);
+        } catch (error) {
+            console.error("Error fetching tasks:", error);
+        }
+    }, []);
+
+    const connectWallet = useCallback(async () => {
+        if (!window.ethereum) return alert('MetaMask is required to use this app!');
+        try {
+            const bnbTestnet = { name: "bnbt", chainId: 97, ensAddress: null };
+            const web3Provider = new ethers.BrowserProvider(window.ethereum, bnbTestnet);
+            await web3Provider.send("eth_requestAccounts", []);
+            
+            const web3Signer = await web3Provider.getSigner();
+            const address = await web3Signer.getAddress();
+            const todoContract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, web3Signer);
+            
+            const token = localStorage.getItem('token');
+            await axios.post(`${API_URL}/link-wallet`, 
+                { walletAddress: address },
+                { headers: { 'x-auth-token': token } }
+            );
+
+            setContract(todoContract);
+            setWalletAddress(address);
+            fetchTasks(todoContract);
+            alert("Wallet connected and linked to your account successfully!");
+        } catch (error) {
+            console.error("Error connecting wallet:", error);
+            alert(error.response?.data?.msg || "Failed to connect wallet. See console for details.");
+        }
+    }, [fetchTasks]);
+
+    // --- USE EFFECT HOOKS ---
+    useEffect(() => {
+        const initializeApp = async () => {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                setIsLoading(false);
+                return;
+            }
+            
+            setIsAuthenticated(true);
+            setUsername(localStorage.getItem('username'));
+
+            if (!window.ethereum) {
+                setIsLoading(false);
+                return;
+            }
+
+            try {
+                const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+                if (accounts.length > 0) {
+                    console.log("Found connected wallet. Re-initializing session...");
+                    const bnbTestnet = { name: "bnbt", chainId: 97, ensAddress: null };
+                    const web3Provider = new ethers.BrowserProvider(window.ethereum, bnbTestnet);
+                    const web3Signer = await web3Provider.getSigner();
+                    const address = await web3Signer.getAddress();
+                    const todoContract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, web3Signer);
+                    
+                    setContract(todoContract);
+                    setWalletAddress(address);
+                    await fetchTasks(todoContract);
+                }
+            } catch (error) {
+                console.error("Could not re-initialize wallet connection:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        initializeApp();
+    }, [fetchTasks]);
+
+    useEffect(() => {
+        const syncPendingTasks = () => { /* Placeholder */ };
+        socket.on('tasks changed', () => { if (contract) fetchTasks(contract); });
+        const handleOnline = () => { setIsOnline(true); syncPendingTasks(); };
+        const handleOffline = () => setIsOnline(false);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        return () => {
+            socket.off('tasks changed');
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, [contract, fetchTasks]);
+
+    // --- EVENT HANDLERS ---
+    const handleAuth = async (e) => {
+        e.preventDefault();
+        const url = isLoginView ? `${API_URL}/login` : `${API_URL}/register`;
+        const payload = isLoginView ? { email, password } : { username, email, password };
+        try {
+            const { data } = await axios.post(url, payload);
+            if (isLoginView) {
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('username', data.username);
+                setUsername(data.username);
+                setIsAuthenticated(true);
+            } else {
+                alert('Registration successful! Please login.');
+                setIsLoginView(true);
+            }
+        } catch (error) {
+            alert(error.response?.data?.msg || 'Authentication failed.');
+        }
+    };
+
+    const handleLogout = () => {
+        localStorage.clear();
+        setIsAuthenticated(false);
+        setWalletAddress('');
+        setTasks([]);
+        setContract(null);
+    };
+
+    const addTask = async (e) => {
+        e.preventDefault();
+        if (!taskTitle || !contract) return;
+        setIsMining(true);
+        try {
+            const dueDateTimestamp = taskDueDate ? new Date(taskDueDate).getTime() / 1000 : 0;
+            const tx = await contract.createTask(taskTitle, taskDesc, taskPriority, dueDateTimestamp);
+            const bscScanUrl = `https://testnet.bscscan.com/tx/${tx.hash}`;
+            alert(`Task creation sent!\n\nTransaction Hash: ${tx.hash}\n\nYou can view its status on BSCScan:\n${bscScanUrl}`);
+            await tx.wait();
+            socket.emit('task updated');
+            setTaskTitle(''); setTaskDesc(''); setTaskPriority('1'); setTaskDueDate('');
+        } catch (error) {
+            console.error("Error adding task:", error);
+            alert("Failed to add task. The transaction may have been rejected.");
+        } finally {
+            setIsMining(false);
+        }
+    };
+    
+    const toggleTaskStatus = async (id) => {
+        if (!contract) return;
+        setIsMining(true);
+        try {
+            const tx = await contract.toggleTaskStatus(id);
+            const bscScanUrl = `https://testnet.bscscan.com/tx/${tx.hash}`;
+            alert(`Task update sent!\n\nTransaction Hash: ${tx.hash}\n\nYou can view its status on BSCScan:\n${bscScanUrl}`);
+            await tx.wait();
+            socket.emit('task updated');
+        } catch (error) { console.error("Error toggling task status:", error); } 
+        finally { setIsMining(false); }
+    };
+
+    const deleteTask = async (id) => {
+        if (!contract) return;
+        setIsMining(true);
+        try {
+            const tx = await contract.deleteTask(id);
+            const bscScanUrl = `https://testnet.bscscan.com/tx/${tx.hash}`;
+            alert(`Task deletion sent!\n\nTransaction Hash: ${tx.hash}\n\nYou can view its status on BSCScan:\n${bscScanUrl}`);
+            await tx.wait();
+            socket.emit('task updated');
+        } catch (error) { console.error("Error deleting task:", error); } 
+        finally { setIsMining(false); }
+    };
+
+    const toggleTheme = () => setTheme(current => current === 'light' ? 'dark' : 'light');
+
+    // --- RENDER LOGIC ---
+    const filteredTasks = tasks.filter(task => {
+        const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesPriority = filterPriority === 'all' || task.priority.toString() === filterPriority;
+        return matchesSearch && matchesPriority;
+    });
+    
+    if (isLoading) {
+        return <LoadingSpinner />;
     }
-  };
 
-  const doLogin = async (e) => {
-    e.preventDefault();
-    try {
-      const res = await axios.post(`${SERVER}/api/auth/login`, form);
-      const { token, username, walletAddress } = res.data;
-      localStorage.setItem('token', token);
-      localStorage.setItem('username', username);
-      if (walletAddress) {
-        localStorage.setItem('walletAddress', walletAddress);
-      }
-      onLogin(token, username, walletAddress);
-    } catch (err) {
-      setNotif({ type: 'error', message: err.response?.data?.msg || 'Login failed' });
-    }
-  };
-
-  return (
-    <div className="auth-container">
-      <Notification notif={notif} onClose={() => setNotif(null)} />
-      <h1 className="app-title">ChainTask</h1>
-      <form onSubmit={isLogin ? doLogin : doRegister} className="auth-form">
-        <input name="username" placeholder="Username" value={form.username} onChange={change} required />
-        {!isLogin && <input name="email" type="email" placeholder="Email" value={form.email} onChange={change} required />}
-        <input name="password" type="password" placeholder="Password" value={form.password} onChange={change} required />
-        {!isLogin && <input name="confirmPassword" type="password" placeholder="Confirm Password" value={form.confirmPassword} onChange={change} required />}
-        <button type="submit" className="btn primary">{isLogin ? "Login" : "Register"}</button>
-      </form>
-      <button onClick={() => setIsLogin(!isLogin)} className="btn switch">
-        {isLogin ? "Need an account? Register" : "Already registered? Login"}
-      </button>
-    </div>
-  );
-}
-
-function Dashboard({ token, username, onLogout }) {
-  const [tasks, setTasks] = useState([]);
-  const [form, setForm] = useState({ content: '', dueDate: '', category: '', priority: 'Medium', status: 'Pending', tags: '' });
-  const [notif, setNotif] = useState(null);
-  const [filters, setFilters] = useState({ status: '', priority: '', tag: '', category: '' });
-  const [walletAddress, setWalletAddress] = useState(localStorage.getItem('walletAddress'));
-
-  const fetchTasks = useCallback(async () => {
-    try {
-      const res = await axios.get(`${SERVER}/api/tasks`, {
-        headers: { 'x-auth-token': token },
-        params: filters
-      });
-      setTasks(res.data);
-    } catch (err) {
-      setNotif({ type: 'error', message: 'Fetch failed' });
-    }
-  }, [token, filters]);
-
-  const createTask = async (e) => {
-    e.preventDefault();
-    try {
-      await axios.post(`${SERVER}/api/tasks`, {
-        ...form,
-        tags: form.tags.split(',').map(t => t.trim())
-      }, { headers: { 'x-auth-token': token } });
-      setForm({ content: '', dueDate: '', category: '', priority: 'Medium', status: 'Pending', tags: '' });
-      fetchTasks();
-      setNotif({ type: 'success', message: 'Task created' });
-    } catch {
-      setNotif({ type: 'error', message: 'Task creation failed' });
-    }
-  };
-
-  const shareTask = async (taskId, toAddress) => {
-    try {
-      const contract = await getContract();
-      const tx = await contract.transferTask(taskId, toAddress);
-      await tx.wait();
-      setNotif({ type: 'success', message: 'Task transferred on blockchain!' });
-    } catch (err) {
-      setNotif({ type: 'error', message: 'Failed to transfer task' });
-    }
-  };
-
-  const connectWallet = async () => {
-    if (!window.ethereum) {
-        return setNotif({ type: 'error', message: "MetaMask not found" });
-    }
-    try {
-        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-        const address = accounts[0];
-
-        // Server-side validation
-        const res = await axios.post(`${SERVER}/api/wallet/connect`, 
-            { walletAddress: address },
-            { headers: { 'x-auth-token': token } }
+    if (!isAuthenticated) {
+        return (
+            <div className={`auth-container ${theme}`}>
+                <div className="auth-form">
+                    <h2>{isLoginView ? 'Welcome Back!' : 'Create Account'}</h2>
+                    <form onSubmit={handleAuth}>
+                        {!isLoginView && <input type="text" placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} required />}
+                        <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required />
+                        <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required />
+                        <button type="submit">{isLoginView ? 'Login' : 'Register'}</button>
+                    </form>
+                    <button className="toggle-auth" type="button" onClick={() => setIsLoginView(!isLoginView)}>
+                        {isLoginView ? 'Need an account? Register' : 'Have an account? Login'}
+                    </button>
+                </div>
+            </div>
         );
-
-        setWalletAddress(res.data.walletAddress);
-        localStorage.setItem('walletAddress', res.data.walletAddress);
-        setNotif({ type: 'success', message: `Wallet connected: ${address.slice(0,6)}...${address.slice(-4)}` });
-
-    } catch (err) {
-        setNotif({ type: 'error', message: err.response?.data?.msg || "Wallet connection failed" });
     }
-  };
 
-  const disconnectWallet = async () => {
-    try {
-        await axios.post(`${SERVER}/api/wallet/disconnect`, {}, { headers: { 'x-auth-token': token } });
-        setWalletAddress(null);
-        localStorage.removeItem('walletAddress');
-        setNotif({ type: 'success', message: 'Wallet disconnected' });
-    } catch (err) {
-        setNotif({ type: 'error', message: 'Failed to disconnect wallet' });
-    }
-  };
-
-  useEffect(() => { fetchTasks(); }, [fetchTasks]);
-
-  const stats = {
-    total: tasks.length,
-    completed: tasks.filter(t => t.status === 'Completed').length,
-    pending: tasks.filter(t => t.status === 'Pending').length,
-    high: tasks.filter(t => t.priority === 'High').length
-  };
-
-  return (
-    <div className="dashboard">
-      <Notification notif={notif} onClose={() => setNotif(null)} />
-      <header className="dashboard-header">
-        <h1 className="app-title">ChainTask</h1>
-        <div className="header-actions">
-          {walletAddress ? (
-            <>
-              <span className="wallet-text">Wallet: {walletAddress.slice(0,6)}...{walletAddress.slice(-4)}</span>
-              <button className="btn disconnect" onClick={disconnectWallet}>Disconnect</button>
-            </>
-          ) : (
-            <button className="btn connect" onClick={connectWallet}>Connect Wallet</button>
-          )}
-          <button onClick={onLogout} className="btn danger">Logout</button>
+    return (
+        <div className={`App ${theme}`}>
+            {isMining && <LoadingSpinner />}
+            <header className="app-header">
+                <h1>ChainTask</h1>
+                <div className="header-controls">
+                    <span>Welcome, {username}</span>
+                    <button className="theme-switcher" onClick={toggleTheme} title="Toggle Theme">{theme === 'light' ? '🌙' : '☀️'}</button>
+                    <button className="logout-btn" onClick={handleLogout}>Logout</button>
+                </div>
+            </header>
+            
+            {!walletAddress ? (
+                <section className="wallet-controls">
+                    <h2>Please Connect Your Wallet</h2>
+                    <p>Link your MetaMask wallet to start managing your tasks on the blockchain.</p>
+                    <button className="connect-wallet-btn" onClick={connectWallet}>Connect Wallet</button>
+                </section>
+            ) : (
+                <>
+                    <div className="wallet-info">
+                        Connected Wallet: <span>{walletAddress}</span>
+                    </div>
+                    {!isOnline && <p style={{color: 'red', textAlign: 'center'}}>You are offline. Changes will be synced later.</p>}
+                    <section className="task-controls">
+                        <form onSubmit={addTask} className="task-form">
+                            <div className="form-group full-width">
+                                <label>Task Title</label>
+                                <input type="text" value={taskTitle} onChange={e => setTaskTitle(e.target.value)} placeholder="What needs to be done?" required />
+                            </div>
+                            <div className="form-group full-width">
+                                <label>Description</label>
+                                <textarea value={taskDesc} onChange={e => setTaskDesc(e.target.value)} placeholder="Add more details..."></textarea>
+                            </div>
+                            <div className="form-group">
+                                <label>Priority</label>
+                                <select value={taskPriority} onChange={e => setTaskPriority(e.target.value)}>
+                                    <option value="2">High</option>
+                                    <option value="1">Medium</option>
+                                    <option value="0">Low</option>
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label>Due Date</label>
+                                <input type="date" value={taskDueDate} onChange={e => setTaskDueDate(e.target.value)} />
+                            </div>
+                            <button type="submit" disabled={isMining}>
+                                {isMining ? 'Processing...' : 'Add Task'}
+                            </button>
+                        </form>
+                        <div className="filters">
+                            <input type="text" placeholder="Search tasks..." onChange={e => setSearchTerm(e.target.value)} />
+                            <select onChange={e => setFilterPriority(e.target.value)}>
+                                <option value="all">All Priorities</option>
+                                <option value="2">High</option>
+                                <option value="1">Medium</option>
+                                <option value="0">Low</option>
+                            </select>
+                        </div>
+                    </section>
+                    <section className="task-list">
+                        {tasks.length > 0 ? (
+                            filteredTasks.map(task => (
+                                <div key={task.id} className={`task-card ${task.isDone ? 'completed' : ''}`}>
+                                    <div className="task-header">
+                                        <h3>{task.title}</h3>
+                                        <span className={`priority-tag ${getPriorityText(task.priority).toLowerCase()}`}>{getPriorityText(task.priority)}</span>
+                                    </div>
+                                    <p>{task.description}</p>
+                                    <div className="task-footer">
+                                        <span className="due-date">
+                                            {task.dueDate > 0 ? `Due: ${new Date(task.dueDate).toLocaleDateString()}` : ''}
+                                        </span>
+                                        <div className="task-actions">
+                                            <button onClick={() => toggleTaskStatus(task.id)} title={task.isDone ? 'Mark as Incomplete' : 'Mark as Complete'}>
+                                                {task.isDone ? '↩️' : '✅'}
+                                            </button>
+                                            <button onClick={() => deleteTask(task.id)} title="Delete Task">
+                                                🗑️
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="empty-tasks">
+                                <h3>Your task list is empty!</h3>
+                                <p>Add a new task above to get started.</p>
+                            </div>
+                        )}
+                    </section>
+                </>
+            )}
         </div>
-      </header>
-
-      <div className="stats">
-        <div className="stat-card">📌 Total: {stats.total}</div>
-        <div className="stat-card">✅ Completed: {stats.completed}</div>
-        <div className="stat-card">🕒 Pending: {stats.pending}</div>
-        <div className="stat-card">🔥 High Priority: {stats.high}</div>
-      </div>
-
-      <form onSubmit={createTask} className="task-form">
-        <input placeholder="Task content" value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} required />
-        <input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
-        <input placeholder="Category (e.g. Work, Personal)" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-        <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-          <option>Low</option><option>Medium</option><option>High</option>
-        </select>
-        <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-          <option>Pending</option><option>Completed</option><option>On Hold</option><option>Postponed</option>
-        </select>
-        <input placeholder="Tags (comma separated)" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
-        <button type="submit" className="btn primary">Add Task</button>
-      </form>
-
-      <div className="filters">
-        <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
-          <option value="">All Status</option>
-          <option>Pending</option><option>Completed</option><option>On Hold</option><option>Postponed</option>
-        </select>
-        <select value={filters.priority} onChange={(e) => setFilters({ ...filters, priority: e.target.value })}>
-          <option value="">All Priority</option>
-          <option>Low</option><option>Medium</option><option>High</option>
-        </select>
-        <input placeholder="Search by Tag" value={filters.tag} onChange={(e) => setFilters({ ...filters, tag: e.target.value })} />
-        <input placeholder="Filter by Category" value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} />
-      </div>
-
-      <div className="task-list">
-        {tasks.length === 0 ? (
-          <p className="empty-text">No tasks yet. Add one!</p>
-        ) : (
-          <ul>
-            {tasks.map((t) => (
-              <li key={t._id} className="task-item">
-                <span>{t.content}</span>
-                {t.dueDate && <small> ⏰ {new Date(t.dueDate).toLocaleDateString()}</small>}
-                {t.category && <small> 📂 {t.category}</small>}
-                <small> [{t.priority}] [{t.status}]</small>
-                {t.tags.length > 0 && <small> 🏷 {t.tags.join(", ")}</small>}
-                <button className="btn share" onClick={() => {
-                  const addr = prompt("Enter recipient wallet address:");
-                  if (addr) shareTask(t._id, addr);
-                }}>🔗 Share</button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
+    );
 }
 
-export default function App() {
-  const [token, setToken] = useState(localStorage.getItem('token'));
-  const [username, setUsername] = useState(localStorage.getItem('username'));
-
-  const handleLogin = (tok, user, wallet) => {
-    setToken(tok);
-    setUsername(user);
-    if (wallet) {
-      localStorage.setItem('walletAddress', wallet);
-    }
-  };
-
-  const handleLogout = () => {
-    setToken(null);
-    setUsername('');
-    localStorage.clear();
-  };
-
-  return token ? (
-    <Dashboard token={token} username={username} onLogout={handleLogout} />
-  ) : (
-    <Auth onLogin={handleLogin} />
-  );
-}
+export default App;
